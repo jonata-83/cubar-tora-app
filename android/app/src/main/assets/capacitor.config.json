@@ -1,0 +1,8 @@
+{
+	"appId": "com.jonata.cubartora",
+	"appName": "Cubar Tora",
+	"webDir": "www",
+	"android": {
+		"allowMixedContent": true
+	}
+}
