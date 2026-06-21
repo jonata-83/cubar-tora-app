@@ -21,7 +21,7 @@ jobs:
           java-version: 21
 
       - name: Install dependencies
-        run: npm install
+        run: npm install && npm install -D typescript
 
       - name: Sync Capacitor
         run: npx cap sync android
