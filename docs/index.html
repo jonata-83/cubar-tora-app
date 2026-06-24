@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -312,6 +311,7 @@ var d=null!=c&&c.hydratedSources||null,e=!1,f="",g=aj;null!==c&&void 0!==c&&(!0=
 function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmountComponentAtNode=function(a){if(!Vd(a))throw Error(m(40));return a._reactRootContainer?(yb(function(){Wd(null,null,a,!1,function(){a._reactRootContainer=null;a[Ja]=null})}),!0):!1};Q.unstable_batchedUpdates=Tf;Q.unstable_renderSubtreeIntoContainer=function(a,b,c,d){if(!Vd(c))throw Error(m(200));if(null==a||void 0===a._reactInternals)throw Error(m(38));return Wd(a,b,c,!1,d)};Q.version="18.3.1-next-f1338f8080-20240426"});
 })();
 </script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
 // Armazenamento local do navegador (substitui o storage do Claude)
 window.storage = {
@@ -759,7 +759,16 @@ async function htmlParaPNG(htmlStr) {
         const h = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight, 400);
         iframe.style.height = h + 'px';
         await new Promise(r => setTimeout(r, 300));
-        if (typeof html2canvas === 'undefined') throw new Error('html2canvas não carregou');
+        if (typeof html2canvas === 'undefined') {
+        // Fallback: tentar carregar dinamicamente
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';
+          s.onload = res;
+          s.onerror = () => rej(new Error('html2canvas não carregou. Verifique sua conexão.'));
+          document.head.appendChild(s);
+        });
+      }
         const canvas = await html2canvas(doc.body, {
           width: 900, height: h, scale: 2,
           backgroundColor: '#ffffff', useCORS: true, logging: false,
