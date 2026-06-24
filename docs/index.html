@@ -1191,32 +1191,49 @@ function CubagemApp() {
     setTimeout(() => { window.storage.delete(SKEY).catch(() => {}); }, 1000);
     setStatusSave("");
   }
-  function compartilhar(url) {
+  async function compartilhar(url) {
     const alvo = typeof url === "string" ? url : pngUrl;
     if (!alvo) return;
-    // No Capacitor Android, usar download direto via link
-    const a = document.createElement("a");
-    a.href = alvo;
-    a.download = "romaneio.png";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    // Tentar share nativo em paralelo
-    setTimeout(() => {
-      try {
-        const arr = alvo.split(',');
-        const mime = arr[0].match(/:(.*?);/)[1];
-        const bstr = atob(arr[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        while (n--) u8arr[n] = bstr.charCodeAt(n);
-        const blob = new Blob([u8arr], { type: mime });
-        const file = new File([blob], "romaneio.png", { type: "image/png" });
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          navigator.share({ files: [file], title: "Romaneio" }).catch(() => {});
+    try {
+      const arr = alvo.split(',');
+      const base64 = arr[1];
+      const mime = arr[0].match(/:(.*?);/)[1];
+      // Tentar salvar via Capacitor Filesystem e depois share
+      if (window.Capacitor && window.Capacitor.Plugins) {
+        const { Filesystem, Share } = window.Capacitor.Plugins;
+        if (Filesystem) {
+          const fileName = 'romaneio_' + Date.now() + '.png';
+          try {
+            const result = await Filesystem.writeFile({
+              path: fileName,
+              data: base64,
+              directory: 'CACHE'
+            });
+            const fileUri = result.uri;
+            if (Share) {
+              await Share.share({ title: 'Romaneio', url: fileUri, dialogTitle: 'Compartilhar PNG' });
+              return;
+            }
+          } catch(e) {}
         }
-      } catch(e) {}
-    }, 100);
+      }
+      // Fallback: Web Share API com arquivo
+      const blob = new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], { type: mime });
+      const file = new File([blob], "romaneio.png", { type: mime });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Romaneio" });
+        return;
+      }
+      // Último fallback: download
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl; a.download = "romaneio.png";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
+    } catch(e) {
+      const a = document.createElement("a");
+      a.href = alvo; a.download = "romaneio.png"; a.click();
+    }
   }
   return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#0f0f0f", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", fontWeight: "bold", color: "#e8e8e8", paddingBottom: 280 } }, /* @__PURE__ */ React.createElement("style", null, `input::placeholder{color:#8a8a8a;font-weight:bold;opacity:1}`), bloqueioToque && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 99999, background: "transparent" }, onPointerDown: (e) => e.preventDefault(), onTouchStart: (e) => e.preventDefault() }), /* @__PURE__ */ React.createElement("div", { style: {
     background: "#1a1a1a",
