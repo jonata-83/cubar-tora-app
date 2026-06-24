@@ -1030,29 +1030,17 @@ function CubagemApp() {
 function compartilhar(url) {
   const alvo = typeof url === "string" ? url : pngUrl;
   if (!alvo) return;
-  const arr = alvo.split(',');
-  const mime = arr[0].match(/:(.*?);/)[1];
-  const bstr = atob(arr[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  while (n--) u8arr[n] = bstr.charCodeAt(n);
-  const blob = new Blob([u8arr], { type: mime });
-  const file = new File([blob], "romaneio.png", { type: mime });
-  // Verificar suporte ANTES de chamar (síncrono)
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    // NÃO usar await aqui — chamar direto no gesto
-    navigator.share({ files: [file], title: "Romaneio" }).catch(() => {
-      // fallback se share falhar após abertura
-      const link = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = link; a.download = "romaneio.png"; a.click();
-      setTimeout(() => URL.revokeObjectURL(link), 2000);
-    });
+  // Abre o PNG em nova aba — funciona em app instalado e arquivo HTML
+  const w = window.open();
+  if (w) {
+    w.document.write(`<img src="${alvo}" style="max-width:100%;display:block">`);
+    w.document.title = "Romaneio";
   } else {
-    const link = URL.createObjectURL(blob);
+    // Fallback se popup bloqueado: download direto
     const a = document.createElement("a");
-    a.href = link; a.download = "romaneio.png"; a.click();
-    setTimeout(() => URL.revokeObjectURL(link), 2000);
+    a.href = alvo;
+    a.download = "romaneio.png";
+    a.click();
   }
 }
   return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#0f0f0f", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", fontWeight: "bold", color: "#e8e8e8", paddingBottom: 280 } }, /* @__PURE__ */ React.createElement("style", null, `input::placeholder{color:#8a8a8a;font-weight:bold;opacity:1}`), bloqueioToque && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 99999, background: "transparent" }, onPointerDown: (e) => e.preventDefault(), onTouchStart: (e) => e.preventDefault() }), /* @__PURE__ */ React.createElement("div", { style: {
