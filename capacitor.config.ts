@@ -6,6 +6,10 @@ const config: CapacitorConfig = {
   webDir: 'www',
   android: {
     allowMixedContent: true
+  },
+  server: {
+    url: 'https://jonata-83.github.io/cubar-tora-app/www/index.html',
+    cleartext: true
   }
 };
 
