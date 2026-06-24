@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
     allowMixedContent: true
   },
   server: {
-    url: 'https://jonata-83.github.io/cubar-tora-app/www/index.html',
+    url: 'https://jonata-83.github.io/cubar-tora-app/',
     cleartext: true
   }
 };
