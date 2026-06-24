@@ -17,6 +17,7 @@ jobs:
         run: |
           mkdir -p docs
           cp www/index.html docs/index.html
+          touch docs/.nojekyll
 
       - name: Commit docs
         run: |
