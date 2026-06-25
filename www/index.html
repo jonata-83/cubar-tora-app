@@ -345,7 +345,7 @@ let _id = 1;
 const uid = () => ++_id;
 const SKEY = "cubagem:carga";
 const HKEY = "cubagem:hist";
-const VERSAO = "v197";
+const VERSAO = "v198";
 function cubar(rodo, comp, oco1 = 0, oco2 = 0) {
   const d = Math.floor(rodo / 4);
   const tdes = oco1 && oco2 ? Math.floor(oco1 * oco2 * comp / 1e3) : 0;
@@ -847,8 +847,11 @@ function CubagemApp() {
   };
   const updateEspecie = (id, f, v) => setEspecies((p) => p.map((e) => e.id === id ? { ...e, [f]: v } : e));
   const toggleOcultoEspecie = (id) => setEspecies((p) => p.map((e) => e.id === id ? { ...e, oculto: !e.oculto } : e));
+  const ultimoConfirm = useRef(0);
   const confirmarTora = () => {
+    if (Date.now() - ultimoConfirm.current < 300) return;
     if (!rodo || !comp || !espAtual || !espAtual.nome) return;
+    ultimoConfirm.current = Date.now();
     const r = Number(rodo), c = Number(comp), o1 = Number(oco1) || 0, o2 = Number(oco2) || 0;
     const tora = { id: uid(), rodo: r, comp: c, oco1: o1, oco2: o2, preco: Number(espAtual.preco) || 0, ...cubar(r, c, o1, o2) };
     setEspecies((p) => p.map((e) => e.id === espAtual.id ? { ...e, toras: [...e.toras, tora] } : e));
@@ -1413,6 +1416,8 @@ async function salvarPNG(base64, imgUrl) {
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
+      onPointerDown: (e) => { e.preventDefault(); },
+      onPointerUp: () => confirmarTora(),
       onClick: confirmarTora,
       disabled: !rodo || !comp,
       style: {
