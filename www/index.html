@@ -345,7 +345,7 @@ let _id = 1;
 const uid = () => ++_id;
 const SKEY = "cubagem:carga";
 const HKEY = "cubagem:hist";
-const VERSAO = "v192";
+const VERSAO = "v193";
 function cubar(rodo, comp, oco1 = 0, oco2 = 0) {
   const d = Math.floor(rodo / 4);
   const tdes = oco1 && oco2 ? Math.floor(oco1 * oco2 * comp / 1e3) : 0;
@@ -713,6 +713,7 @@ function CubagemApp() {
   const [resumoOpen, setResumoOpen] = useState(false);
   const [detalheEspecie, setDetalheEspecie] = useState(null);
   const [resumoOcultas, setResumoOcultas] = useState([]);
+  const [compFallback, setCompFallback] = useState(null);
   const [espAberta, setEspAberta] = useState(null);
   const [outraNome, setOutraNome] = useState("");
   const [rodo, setRodo] = useState("");
@@ -1075,23 +1076,21 @@ async function compartilhar(url) {
     const blob = dataURLparaBlob(alvo);
     file = new File([blob], "romaneio.png", { type: "image/png" });
   } catch (e) {}
-  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+  // canShare é só uma DICA: alguns navegadores retornam false mas o share funciona.
+  const podeArquivo = file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }));
+  if (podeArquivo) {
     try {
       await navigator.share({ files: [file], title: "Romaneio" });
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return; // usuário cancelou
+      // qualquer outro erro -> cai no plano B abaixo
     }
   }
-  // Fallback: baixa o PNG direto
-  const a = document.createElement("a");
-  a.href = alvo;
-  a.download = "romaneio.png";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // Plano B garantido: abre a imagem em tela cheia para segurar e salvar/compartilhar
+  setCompFallback(alvo);
 }
-  return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#0f0f0f", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", fontWeight: "bold", color: "#e8e8e8", paddingBottom: 280 } }, /* @__PURE__ */ React.createElement("style", null, `input::placeholder{color:#8a8a8a;font-weight:bold;opacity:1}`), bloqueioToque && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 99999, background: "transparent" }, onPointerDown: (e) => e.preventDefault(), onTouchStart: (e) => e.preventDefault() }), /* @__PURE__ */ React.createElement("div", { style: {
+  return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#0f0f0f", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", fontWeight: "bold", color: "#e8e8e8", paddingBottom: 280 } }, /* @__PURE__ */ React.createElement("style", null, `input::placeholder{color:#8a8a8a;font-weight:bold;opacity:1}`), bloqueioToque && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 99999, background: "transparent" }, onPointerDown: (e) => e.preventDefault(), onTouchStart: (e) => e.preventDefault() }), compFallback && /* @__PURE__ */ React.createElement("div", { onClick: () => setCompFallback(null), style: { position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 15, marginBottom: 12, textAlign: "center", lineHeight: 1.4 } }, "Segure na imagem para ", /* @__PURE__ */ React.createElement("b", null, "Salvar"), " ou ", /* @__PURE__ */ React.createElement("b", null, "Compartilhar")), /* @__PURE__ */ React.createElement("img", { src: compFallback, onClick: (e) => e.stopPropagation(), style: { maxWidth: "100%", maxHeight: "70vh", borderRadius: 8, border: "1px solid #333" } }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 16 } }, /* @__PURE__ */ React.createElement("a", { href: compFallback, download: "romaneio.png", onClick: (e) => e.stopPropagation(), style: { ...BS("#1a2a1a", "#4dff91"), fontSize: 15, padding: "10px 18px", textDecoration: "none" } }, "\u2B07 Baixar PNG"), /* @__PURE__ */ React.createElement("button", { onClick: () => setCompFallback(null), style: { ...BS("#1a1a1a", "#aaa"), fontSize: 15, padding: "10px 18px" } }, "\u2715 Fechar"))), /* @__PURE__ */ React.createElement("div", { style: {
     background: "#1a1a1a",
     borderBottom: "1px solid #252525",
     padding: "12px 16px",
