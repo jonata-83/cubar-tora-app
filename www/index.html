@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -346,7 +345,7 @@ let _id = 1;
 const uid = () => ++_id;
 const SKEY = "cubagem:carga";
 const HKEY = "cubagem:hist";
-const VERSAO = "v191";
+const VERSAO = "v192";
 function cubar(rodo, comp, oco1 = 0, oco2 = 0) {
   const d = Math.floor(rodo / 4);
   const tdes = oco1 && oco2 ? Math.floor(oco1 * oco2 * comp / 1e3) : 0;
@@ -762,6 +761,12 @@ function CubagemApp() {
         if (Array.isArray(arr) && arr.length) setListaEspecies(arr);
       } catch {
       }
+      try {
+        const ro = await window.storage.get("cubagem:resumoOcultas");
+        const arr = JSON.parse(ro.value);
+        if (Array.isArray(arr)) setResumoOcultas(arr);
+      } catch {
+      }
       setCarregado(true);
     })();
   }, []);
@@ -788,6 +793,11 @@ function CubagemApp() {
     window.storage.set("cubagem:especies", JSON.stringify(listaEspecies)).catch(() => {
     });
   }, [carregado, listaEspecies]);
+  useEffect(() => {
+    if (!carregado) return;
+    window.storage.set("cubagem:resumoOcultas", JSON.stringify(resumoOcultas)).catch(() => {
+    });
+  }, [carregado, resumoOcultas]);
   const espAtual = especies.find((e) => e.id === espSel) || especies[0];
   const [bloqueioToque, setBloqueioToque] = React.useState(false);
   const [tecladoAberto, setTecladoAberto] = React.useState(false);
@@ -1047,24 +1057,39 @@ function CubagemApp() {
     setTimeout(() => { window.storage.delete(SKEY).catch(() => {}); }, 1000);
     setStatusSave("");
   }
+function dataURLparaBlob(dataURL) {
+  const partes = dataURL.split(",");
+  const mime = (partes[0].match(/:(.*?);/) || [, "image/png"])[1];
+  const bin = atob(partes[1]);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
 async function compartilhar(url) {
   const alvo = typeof url === "string" ? url : pngUrl;
   if (!alvo) return;
+  // Converte SÍNCRONO (sem fetch/await) para preservar o gesto do usuário —
+  // no Android o navigator.share só funciona se chamado dentro do toque.
+  let file = null;
   try {
-    const blob = await (await fetch(alvo)).blob();
-    const file = new File([blob], "romaneio.png", { type: "image/png" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    const blob = dataURLparaBlob(alvo);
+    file = new File([blob], "romaneio.png", { type: "image/png" });
+  } catch (e) {}
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
       await navigator.share({ files: [file], title: "Romaneio" });
       return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return; // usuário cancelou
     }
-  } catch (e) {
-    if (e && e.name === "AbortError") return; // usuário cancelou o compartilhar
   }
-  // Fallback: se o aparelho não suportar compartilhar arquivo, baixa o PNG
+  // Fallback: baixa o PNG direto
   const a = document.createElement("a");
   a.href = alvo;
   a.download = "romaneio.png";
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
 }
   return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#0f0f0f", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", fontWeight: "bold", color: "#e8e8e8", paddingBottom: 280 } }, /* @__PURE__ */ React.createElement("style", null, `input::placeholder{color:#8a8a8a;font-weight:bold;opacity:1}`), bloqueioToque && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 99999, background: "transparent" }, onPointerDown: (e) => e.preventDefault(), onTouchStart: (e) => e.preventDefault() }), /* @__PURE__ */ React.createElement("div", { style: {
     background: "#1a1a1a",
@@ -1409,7 +1434,7 @@ async function compartilhar(url) {
       },
       conf ? "Excluir?" : "\u2715"
     ));
-  })))), pngUrl && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("img", { src: pngUrl, alt: "Romaneio", style: { maxWidth: "100%", borderRadius: 8, border: "1px solid #2a2a2a" } })))), aba === "toras" && /* @__PURE__ */ React.createElement(React.Fragment, null, totalToras === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#555", padding: "60px 0", fontSize: 16 } }, "Nenhuma tora lan\xE7ada ainda.", /* @__PURE__ */ React.createElement("br", null), /* @__PURE__ */ React.createElement("button", { onClick: () => setAba("lancar"), style: { ...BSP, marginTop: 16 } }, "Ir para Lan\xE7amento")) : especies.filter((e) => e.toras.length > 0).map((esp) => {
+  })))), pngUrl && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: { position: "relative", textAlign: "center", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setPngUrl(null), style: { position: "absolute", top: 8, right: 8, zIndex: 10, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,0.72)", border: "1px solid #888", color: "#fff", fontSize: 18, cursor: "pointer", lineHeight: "1", padding: 0 } }, "\u2715"), /* @__PURE__ */ React.createElement("img", { src: pngUrl, alt: "Romaneio", style: { maxWidth: "100%", borderRadius: 8, border: "1px solid #2a2a2a" } })))), aba === "toras" && /* @__PURE__ */ React.createElement(React.Fragment, null, totalToras === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#555", padding: "60px 0", fontSize: 16 } }, "Nenhuma tora lan\xE7ada ainda.", /* @__PURE__ */ React.createElement("br", null), /* @__PURE__ */ React.createElement("button", { onClick: () => setAba("lancar"), style: { ...BSP, marginTop: 16 } }, "Ir para Lan\xE7amento")) : especies.filter((e) => e.toras.length > 0).map((esp) => {
     const subM3 = esp.toras.reduce((s, t) => s + t.m3, 0);
     const subRs = esp.toras.reduce((s, t) => s + t.m3 * (Number(t.preco) || 0), 0);
     const precosUnicos = [...new Set(esp.toras.map((t) => Number(t.preco) || 0))];
@@ -1656,7 +1681,7 @@ async function compartilhar(url) {
         esp.oculto ? "\uD83D\uDEAB Incluir no romaneio" : "\uD83D\uDC41 Ocultar do romaneio"
       )
     );
-  }), pngUrl && React.createElement("div", { style: { textAlign: "center", margin: "16px 0" } }, React.createElement("img", { src: pngUrl, style: { maxWidth: "100%", borderRadius: 8 } }))), aba === "hist" && /* @__PURE__ */ React.createElement(React.Fragment, null, historico.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#555", padding: "60px 0", fontSize: 16 } }, "Nenhum romaneio gerado ainda.", /* @__PURE__ */ React.createElement("br", null), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "Toque em \u{1F4C4} Gerar e ele fica salvo aqui.")) : [...historico].sort((a, b) => {
+  }), pngUrl && React.createElement("div", { style: { position: "relative", textAlign: "center", margin: "16px 0" } }, React.createElement("button", { onClick: () => setPngUrl(null), style: { position: "absolute", top: 8, right: 8, zIndex: 10, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,0.72)", border: "1px solid #888", color: "#fff", fontSize: 18, cursor: "pointer", lineHeight: "1", padding: 0 } }, "\u2715"), React.createElement("img", { src: pngUrl, style: { maxWidth: "100%", borderRadius: 8 } }))), aba === "hist" && /* @__PURE__ */ React.createElement(React.Fragment, null, historico.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#555", padding: "60px 0", fontSize: 16 } }, "Nenhum romaneio gerado ainda.", /* @__PURE__ */ React.createElement("br", null), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "Toque em \u{1F4C4} Gerar e ele fica salvo aqui.")) : [...historico].sort((a, b) => {
     const parseData = (h) => {
       const d = h.data || "";
       const [dia, mes] = d.split("/").map(Number);
