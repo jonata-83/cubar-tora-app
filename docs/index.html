@@ -345,7 +345,7 @@ let _id = 1;
 const uid = () => ++_id;
 const SKEY = "cubagem:carga";
 const HKEY = "cubagem:hist";
-const VERSAO = "v195";
+const VERSAO = "v196";
 function cubar(rodo, comp, oco1 = 0, oco2 = 0) {
   const d = Math.floor(rodo / 4);
   const tdes = oco1 && oco2 ? Math.floor(oco1 * oco2 * comp / 1e3) : 0;
@@ -1069,14 +1069,27 @@ function dataURLparaBlob(dataURL) {
 async function compartilhar(url) {
   const alvo = typeof url === "string" ? url : pngUrl;
   if (!alvo) return;
-  // Converte SÍNCRONO (sem fetch/await) para preservar o gesto do usuário —
-  // no Android o navigator.share só funciona se chamado dentro do toque.
+  const base64 = alvo.indexOf(",") >= 0 ? alvo.split(",")[1] : alvo;
+  // 1) APK (Capacitor): usa plugins nativos Share + Filesystem se estiverem instalados
+  const Cap = window.Capacitor;
+  const P = Cap && Cap.Plugins;
+  if (P && P.Share && P.Filesystem) {
+    try {
+      const nome = "romaneio_" + Date.now() + ".png";
+      const w = await P.Filesystem.writeFile({ path: nome, data: base64, directory: "CACHE" });
+      await P.Share.share({ title: "Romaneio", files: [w.uri] });
+      return;
+    } catch (e) {
+      if (e && (e.message || "").toLowerCase().indexOf("cancel") >= 0) return;
+      // senão, tenta os caminhos abaixo
+    }
+  }
+  // 2) Navegador / WebView moderno: Web Share API com arquivo
   let file = null;
   try {
     const blob = dataURLparaBlob(alvo);
     file = new File([blob], "romaneio.png", { type: "image/png" });
   } catch (e) {}
-  // canShare é só uma DICA: alguns navegadores retornam false mas o share funciona.
   const podeArquivo = file && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }));
   if (podeArquivo) {
     try {
@@ -1084,15 +1097,37 @@ async function compartilhar(url) {
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return; // usuário cancelou
-      // qualquer outro erro -> cai no plano B abaixo
     }
   }
-  // Plano B garantido: abre a imagem em tela cheia para segurar e salvar/compartilhar
+  // 3) Plano B: abre a imagem em tela cheia para segurar e salvar/compartilhar
   let blobUrl = alvo;
   try { if (file) blobUrl = URL.createObjectURL(file); } catch (e) {}
-  setCompFallback({ img: blobUrl, isBlob: blobUrl !== alvo });
+  setCompFallback({ img: blobUrl, isBlob: blobUrl !== alvo, base64 });
 }
-  return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#0f0f0f", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", fontWeight: "bold", color: "#e8e8e8", paddingBottom: 280 } }, /* @__PURE__ */ React.createElement("style", null, `input::placeholder{color:#8a8a8a;font-weight:bold;opacity:1}`), bloqueioToque && !compFallback && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 99999, background: "transparent" }, onPointerDown: (e) => e.preventDefault(), onTouchStart: (e) => e.preventDefault() }), compFallback && ReactDOM.createPortal(/* @__PURE__ */ React.createElement("div", { onClick: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, style: { position: "fixed", inset: 0, zIndex: 2147483646, background: "rgba(0,0,0,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16, boxSizing: "border-box", overflowY: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 15, marginBottom: 12, textAlign: "center", lineHeight: 1.4 } }, "Segure na imagem para ", /* @__PURE__ */ React.createElement("b", null, "Salvar"), " ou ", /* @__PURE__ */ React.createElement("b", null, "Compartilhar")), /* @__PURE__ */ React.createElement("img", { src: compFallback.img, onClick: (e) => e.stopPropagation(), style: { maxWidth: "100%", maxHeight: "58vh", borderRadius: 8, border: "1px solid #333" } }), /* @__PURE__ */ React.createElement("div", { onClick: (e) => e.stopPropagation(), style: { display: "flex", gap: 12, marginTop: 18, flexShrink: 0 } }, /* @__PURE__ */ React.createElement("a", { href: compFallback.img, download: "romaneio.png", onClick: (e) => e.stopPropagation(), style: { ...BS("#1a2a1a", "#4dff91"), fontSize: 16, padding: "16px 24px", textDecoration: "none", display: "inline-block" } }, "\u2B07 Baixar"), /* @__PURE__ */ React.createElement("button", { type: "button", onPointerUp: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, onClick: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, style: { ...BS("#2a2a2a", "#fff"), fontSize: 16, padding: "16px 24px" } }, "\u2715 Fechar")), /* @__PURE__ */ React.createElement("div", { style: { color: "#777", fontSize: 12, marginTop: 14, textAlign: "center" } }, "Toque na \xE1rea escura para fechar")), document.body), /* @__PURE__ */ React.createElement("div", { style: {
+async function salvarPNG(base64, imgUrl) {
+  const Cap = window.Capacitor;
+  const P = Cap && Cap.Plugins;
+  // No APK: salva de verdade na pasta Documentos via Filesystem nativo
+  if (P && P.Filesystem) {
+    try {
+      const nome = "romaneio_" + Date.now() + ".png";
+      await P.Filesystem.writeFile({ path: nome, data: base64, directory: "DOCUMENTS" });
+      try { if (P.Toast) await P.Toast.show({ text: "Salvo em Documentos: " + nome }); else alert("Salvo em Documentos:\n" + nome); } catch (e) { alert("Salvo em Documentos:\n" + nome); }
+      return;
+    } catch (e) {
+      alert("Não consegui salvar pelo app. Tente segurar na imagem.");
+      return;
+    }
+  }
+  // No navegador: download normal
+  const a = document.createElement("a");
+  a.href = imgUrl;
+  a.download = "romaneio.png";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+  return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#0f0f0f", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", fontWeight: "bold", color: "#e8e8e8", paddingBottom: 280 } }, /* @__PURE__ */ React.createElement("style", null, `input::placeholder{color:#8a8a8a;font-weight:bold;opacity:1}`), bloqueioToque && !compFallback && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 99999, background: "transparent" }, onPointerDown: (e) => e.preventDefault(), onTouchStart: (e) => e.preventDefault() }), compFallback && ReactDOM.createPortal(/* @__PURE__ */ React.createElement("div", { onClick: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, style: { position: "fixed", inset: 0, zIndex: 2147483646, background: "rgba(0,0,0,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16, boxSizing: "border-box", overflowY: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 15, marginBottom: 12, textAlign: "center", lineHeight: 1.4 } }, "Segure na imagem para ", /* @__PURE__ */ React.createElement("b", null, "Salvar"), " ou ", /* @__PURE__ */ React.createElement("b", null, "Compartilhar")), /* @__PURE__ */ React.createElement("img", { src: compFallback.img, onClick: (e) => e.stopPropagation(), style: { maxWidth: "100%", maxHeight: "58vh", borderRadius: 8, border: "1px solid #333" } }), /* @__PURE__ */ React.createElement("div", { onClick: (e) => e.stopPropagation(), style: { display: "flex", gap: 12, marginTop: 18, flexShrink: 0 } }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => salvarPNG(compFallback.base64, compFallback.img), style: { ...BS("#1a2a1a", "#4dff91"), fontSize: 16, padding: "16px 24px" } }, "\u2B07 Salvar"), /* @__PURE__ */ React.createElement("button", { type: "button", onPointerUp: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, onClick: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, style: { ...BS("#2a2a2a", "#fff"), fontSize: 16, padding: "16px 24px" } }, "\u2715 Fechar")), /* @__PURE__ */ React.createElement("div", { style: { color: "#777", fontSize: 12, marginTop: 14, textAlign: "center" } }, "Toque na \xE1rea escura para fechar")), document.body), /* @__PURE__ */ React.createElement("div", { style: {
     background: "#1a1a1a",
     borderBottom: "1px solid #252525",
     padding: "12px 16px",
