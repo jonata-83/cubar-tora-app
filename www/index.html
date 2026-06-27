@@ -345,7 +345,7 @@ let _id = 1;
 const uid = () => ++_id;
 const SKEY = "cubagem:carga";
 const HKEY = "cubagem:hist";
-const VERSAO = "v198";
+const VERSAO = "v200";
 function cubar(rodo, comp, oco1 = 0, oco2 = 0) {
   const d = Math.floor(rodo / 4);
   const tdes = oco1 && oco2 ? Math.floor(oco1 * oco2 * comp / 1e3) : 0;
@@ -732,6 +732,15 @@ function CubagemApp() {
   useEffect(() => {
     (async () => {
       try {
+        // Limpa PNGs antigos do histórico (não são mais usados — a imagem é regenerada)
+        const apagar = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.indexOf("cubagem:hist:png:") === 0) apagar.push(k);
+        }
+        apagar.forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
+      } catch (e) {}
+      try {
         const r = await window.storage.get(SKEY);
         if (r?.value) {
           const s = JSON.parse(r.value);
@@ -940,14 +949,42 @@ function CubagemApp() {
   }
   async function salvarHistorico(entry, png) {
     try {
-      const removidos = historico.filter((h) => h.id !== entry.id).slice(29);
-      const idx = [entry, ...historico.filter((h) => h.id !== entry.id)].slice(0, 30);
+      const idx = [entry, ...historico.filter((h) => h.id !== entry.id)].slice(0, 200);
       setHistorico(idx);
       await window.storage.set(HKEY, JSON.stringify(idx));
-      await window.storage.set("cubagem:hist:png:" + entry.id, png);
-      for (const r of removidos) window.storage.delete("cubagem:hist:png:" + r.id).catch(() => {
-      });
+      // PNG não é mais guardado (economiza espaço); a imagem é regenerada ao abrir.
+      window.storage.delete("cubagem:hist:png:" + entry.id).catch(() => {});
     } catch {
+    }
+  }
+  function regenerarPNGHist(h) {
+    const especiesRec = (h.especiesResumo || []).map((er) => ({
+      nome: er.nome,
+      preco: Number(er.prc) || 0,
+      toras: (er.toras || []).map((t) => {
+        const r = Number(t.rodo) || 0, c = Number(t.comp) || 0, o1 = Number(t.oco1) || 0, o2 = Number(t.oco2) || 0;
+        const cub = cubar(r, c, o1, o2);
+        let m3 = Number(t.m3);
+        if (!Number.isFinite(m3)) m3 = cub.m3;
+        let tdes = cub.tdes;
+        if (m3 !== cub.m3) tdes = Math.max(0, cub.bruto - m3);
+        return { rodo: r, comp: c, oco1: o1, oco2: o2, preco: Number(t.preco) || 0, m3, tdes, bruto: cub.bruto };
+      })
+    }));
+    if (!especiesRec.some((e) => e.toras.length)) return null;
+    const liq = especiesRec.reduce((s, e) => s + e.toras.reduce((ss, t) => ss + t.m3, 0), 0);
+    const bruto = especiesRec.reduce((s, e) => s + e.toras.reduce((ss, t) => ss + t.bruto, 0), 0);
+    const fb = h.freteBase || "bruto";
+    const freteM3 = fb === "bruto" ? bruto : liq;
+    let titulo = h.titulo;
+    if (!titulo) {
+      const nt = especiesRec.reduce((s, e) => s + e.toras.length, 0);
+      titulo = `${h.fornecedor || ""} (${nt} toras) \u2014 ${h.data || ""}`;
+    }
+    try {
+      return gerarPNG({ titulo, especies: especiesRec, fretePrc: Number(h.fretePrc) || 0, freteM3, freteBase: fb });
+    } catch (e) {
+      return null;
     }
   }
   async function abrirHist(h) {
@@ -955,12 +992,14 @@ function CubagemApp() {
       setHistSel(null);
       return;
     }
+    let png = null;
     try {
       const r = await window.storage.get("cubagem:hist:png:" + h.id);
-      setHistSel({ ...h, png: r.value });
+      png = r.value;
     } catch {
-      setHistSel({ ...h, png: null });
     }
+    if (!png) png = regenerarPNGHist(h);
+    setHistSel({ ...h, png });
   }
   async function editarHist(h) {
     clearTimeout(saveTimer.current);
@@ -971,6 +1010,7 @@ function CubagemApp() {
       png = r.value;
     } catch {
     }
+    if (!png) png = regenerarPNGHist(h);
     const novasEspecies = (h.especiesResumo || []).map((er) => ({
       id: uid(),
       nome: er.nome,
