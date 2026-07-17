@@ -345,7 +345,9 @@ let _id = 1;
 const uid = () => ++_id;
 const SKEY = "cubagem:carga";
 const HKEY = "cubagem:hist";
-const VERSAO = "v203";
+const VERSAO = "v204";
+const BKEY = "cubagem:bandeiras";
+const CORES_BANDEIRA = ["#e05252", "#3fa34d", "#3b82f6", "#eab308", "#a855f7", "#f97316", "#14b8a6", "#ec4899"];
 function cubar(rodo, comp, oco1 = 0, oco2 = 0) {
   const d = Math.floor(rodo / 4);
   const tdes = oco1 && oco2 ? Math.floor(oco1 * oco2 * comp / 1e3) : 0;
@@ -719,6 +721,12 @@ function CubagemApp() {
   const [resumoOpen, setResumoOpen] = useState(false);
   const [detalheEspecie, setDetalheEspecie] = useState(null);
   const [resumoOcultas, setResumoOcultas] = useState([]);
+  const [bandeiras, setBandeiras] = useState([]);
+  const [filtroBand, setFiltroBand] = useState(null);
+  const [bandMenu, setBandMenu] = useState(null);
+  const [gerBand, setGerBand] = useState(false);
+  const [novaBandNome, setNovaBandNome] = useState("");
+  const [novaBandCor, setNovaBandCor] = useState(CORES_BANDEIRA[0]);
   const [compFallback, setCompFallback] = useState(null);
   const [espAberta, setEspAberta] = useState(null);
   const [outraNome, setOutraNome] = useState("");
@@ -783,6 +791,12 @@ function CubagemApp() {
         if (Array.isArray(arr)) setResumoOcultas(arr);
       } catch {
       }
+      try {
+        const bd = await window.storage.get(BKEY);
+        const arr = JSON.parse(bd.value);
+        if (Array.isArray(arr)) setBandeiras(arr);
+      } catch {
+      }
       setCarregado(true);
     })();
   }, []);
@@ -814,6 +828,11 @@ function CubagemApp() {
     window.storage.set("cubagem:resumoOcultas", JSON.stringify(resumoOcultas)).catch(() => {
     });
   }, [carregado, resumoOcultas]);
+  useEffect(() => {
+    if (!carregado) return;
+    window.storage.set(BKEY, JSON.stringify(bandeiras)).catch(() => {
+    });
+  }, [carregado, bandeiras]);
   const espAtual = especies.find((e) => e.id === espSel) || especies[0];
   const [bloqueioToque, setBloqueioToque] = React.useState(false);
   const [tecladoAberto, setTecladoAberto] = React.useState(false);
@@ -1068,6 +1087,41 @@ function CubagemApp() {
     } catch {
     }
   }
+  async function setBandHist(hid, bid) {
+    const idx = historico.map((x) => x.id === hid ? { ...x, bandeira: bid } : x);
+    setHistorico(idx);
+    if (histSel?.id === hid) setHistSel({ ...histSel, bandeira: bid });
+    setBandMenu(null);
+    try {
+      await window.storage.set(HKEY, JSON.stringify(idx));
+    } catch {
+    }
+  }
+  function abrirGerBand() {
+    const usadas = bandeiras.map((b) => b.cor);
+    setNovaBandCor(CORES_BANDEIRA.find((c) => !usadas.includes(c)) || CORES_BANDEIRA[0]);
+    setGerBand(true);
+  }
+  function addBandeira() {
+    const nome = novaBandNome.trim();
+    if (!nome) return;
+    const usadas = bandeiras.map((b) => b.cor);
+    const cor = novaBandCor || CORES_BANDEIRA.find((c) => !usadas.includes(c)) || CORES_BANDEIRA[0];
+    setBandeiras((p) => [...p, { id: `b${Date.now()}`, nome, cor }]);
+    setNovaBandNome("");
+    const prox = CORES_BANDEIRA.find((c) => c !== cor && !usadas.includes(c));
+    if (prox) setNovaBandCor(prox);
+  }
+  async function removeBandeira(bid) {
+    setBandeiras((p) => p.filter((b) => b.id !== bid));
+    if (filtroBand === bid) setFiltroBand(null);
+    const idx = historico.map((x) => x.bandeira === bid ? { ...x, bandeira: null } : x);
+    setHistorico(idx);
+    try {
+      await window.storage.set(HKEY, JSON.stringify(idx));
+    } catch {
+    }
+  }
   async function toggleOcultoHist(h) {
     const idx = historico.map((x) => x.id === h.id ? { ...x, oculto: !x.oculto } : x);
     setHistorico(idx);
@@ -1177,6 +1231,113 @@ async function salvarPNG(base64, imgUrl) {
   a.click();
   document.body.removeChild(a);
 }
+  const bandDe = (h) => bandeiras.find((b) => b.id === h.bandeira) || null;
+  const histFiltrado = filtroBand ? historico.filter((h) => h.bandeira === filtroBand) : historico;
+  const contaBand = (bid) => historico.filter((h) => h.bandeira === bid).length;
+  const chipBand = (b, ativo, onClick, extra) => /* @__PURE__ */ React.createElement("button", {
+    key: b ? b.id : "todas",
+    onClick,
+    style: {
+      display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+      background: ativo ? (b ? b.cor + "33" : "#1e1b4b") : "#161616",
+      border: `1px solid ${ativo ? (b ? b.cor : "#a5b4fc") : "#2c2c2c"}`,
+      color: ativo ? "#fff" : "#aaa",
+      borderRadius: 20, padding: "7px 13px", fontSize: 14, fontWeight: "bold",
+      fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", cursor: "pointer", whiteSpace: "nowrap"
+    }
+  }, b && /* @__PURE__ */ React.createElement("span", { style: { width: 10, height: 10, borderRadius: "50%", background: b.cor, display: "inline-block" } }), b ? b.nome : "Todas", extra != null && /* @__PURE__ */ React.createElement("span", { style: { color: "#888", fontWeight: "normal" } }, `(${extra})`));
+  const barraBandeiras = /* @__PURE__ */ React.createElement("div", {
+    style: { display: "flex", gap: 8, overflowX: "auto", padding: "2px 0 12px", WebkitOverflowScrolling: "touch" }
+  },
+    chipBand(null, filtroBand === null, () => setFiltroBand(null), historico.length),
+    ...bandeiras.map((b) => chipBand(b, filtroBand === b.id, () => setFiltroBand(b.id), contaBand(b.id))),
+    /* @__PURE__ */ React.createElement("button", {
+      key: "gerenciar",
+      onClick: () => abrirGerBand(),
+      style: { flexShrink: 0, background: "#161616", border: "1px dashed #4444aa", color: "#a5b4fc", borderRadius: 20, padding: "7px 13px", fontSize: 14, fontWeight: "bold", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", cursor: "pointer", whiteSpace: "nowrap" }
+    }, "\u2691 Bandeiras")
+  );
+  const totFiltM3 = histFiltrado.reduce((s, h) => s + (Number(h.m3) || 0), 0);
+  const totFiltRs = histFiltrado.reduce((s, h) => s + (Number(h.rs) || 0), 0);
+  const resumoFiltro = filtroBand ? /* @__PURE__ */ React.createElement("div", {
+    style: { background: "#141414", border: "1px solid #2a2a2a", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 14, color: "#ddd", display: "flex", justifyContent: "space-between", gap: 8 }
+  },
+    /* @__PURE__ */ React.createElement("span", null, `${histFiltrado.length} romaneio${histFiltrado.length === 1 ? "" : "s"}`),
+    /* @__PURE__ */ React.createElement("span", null, fmtNum(totFiltM3), " m\xB3 \u2022 R$ ", fmtNum(totFiltRs))
+  ) : null;
+  const folhaBandeira = bandMenu ? /* @__PURE__ */ React.createElement("div", {
+    onClick: () => setBandMenu(null),
+    style: { position: "fixed", inset: 0, zIndex: 400, background: "#000a", display: "flex", alignItems: "flex-end" }
+  }, /* @__PURE__ */ React.createElement("div", {
+    onClick: (e) => e.stopPropagation(),
+    style: { width: "100%", background: "#111", borderRadius: "16px 16px 0 0", padding: "18px 16px 32px", maxHeight: "80vh", overflowY: "auto" }
+  },
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: "bold", color: "#fff", marginBottom: 14 } }, "\u2691 Bandeira do romaneio"),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+      /* @__PURE__ */ React.createElement("button", {
+        onClick: () => setBandHist(bandMenu, null),
+        style: { ...BS("#161616", "#aaaaaa"), textAlign: "left", fontSize: 15, padding: "13px 14px" }
+      }, "\u2014 Sem bandeira"),
+      ...bandeiras.map((b) => /* @__PURE__ */ React.createElement("button", {
+        key: b.id,
+        onClick: () => setBandHist(bandMenu, b.id),
+        style: { display: "flex", alignItems: "center", gap: 10, background: "#161616", border: `1px solid ${b.cor}`, borderLeft: `6px solid ${b.cor}`, borderRadius: 7, color: "#fff", padding: "13px 14px", fontSize: 15, fontWeight: "bold", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", cursor: "pointer", textAlign: "left" }
+      }, /* @__PURE__ */ React.createElement("span", { style: { width: 12, height: 12, borderRadius: "50%", background: b.cor } }), b.nome)),
+      bandeiras.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { color: "#666", fontSize: 14, padding: "6px 2px" } }, "Nenhuma bandeira cadastrada ainda."),
+      /* @__PURE__ */ React.createElement("button", {
+        onClick: () => { setBandMenu(null); abrirGerBand(); },
+        style: { ...BS("#1a1a3a", "#a5b4fc"), fontSize: 14, padding: "12px 14px", marginTop: 6 }
+      }, "\u2699 Gerenciar bandeiras")
+    )
+  )) : null;
+  const folhaGerenciar = gerBand ? /* @__PURE__ */ React.createElement("div", {
+    onClick: () => setGerBand(false),
+    style: { position: "fixed", inset: 0, zIndex: 400, background: "#000a", display: "flex", alignItems: "flex-end" }
+  }, /* @__PURE__ */ React.createElement("div", {
+    onClick: (e) => e.stopPropagation(),
+    style: { width: "100%", background: "#111", borderRadius: "16px 16px 0 0", padding: "18px 16px 32px", maxHeight: "85vh", overflowY: "auto" }
+  },
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 } },
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: "bold", color: "#fff" } }, "\u2691 Bandeiras (serrarias)"),
+      /* @__PURE__ */ React.createElement("button", { onClick: () => setGerBand(false), style: { background: "none", border: "none", color: "#888", fontSize: 22, cursor: "pointer", padding: 0, lineHeight: 1 } }, "\u2715")
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 } },
+      ...bandeiras.map((b) => /* @__PURE__ */ React.createElement("div", {
+        key: b.id,
+        style: { display: "flex", alignItems: "center", gap: 10, background: "#161616", border: "1px solid #2a2a2a", borderLeft: `6px solid ${b.cor}`, borderRadius: 7, padding: "10px 12px" }
+      },
+        /* @__PURE__ */ React.createElement("span", { style: { width: 12, height: 12, borderRadius: "50%", background: b.cor, flexShrink: 0 } }),
+        /* @__PURE__ */ React.createElement("input", {
+          value: b.nome,
+          onChange: (e) => setBandeiras((p) => p.map((x) => x.id === b.id ? { ...x, nome: e.target.value } : x)),
+          style: { ...IS, fontSize: 15, padding: "8px 8px", flex: 1 }
+        }),
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#777", flexShrink: 0 } }, `${contaBand(b.id)}`),
+        /* @__PURE__ */ React.createElement("button", {
+          onClick: () => pedirRemocao(`banddel:${b.id}`, () => removeBandeira(b.id)),
+          style: { ...BS(confirmaDel === `banddel:${b.id}` ? "#cc2222" : "#2a0a0a", confirmaDel === `banddel:${b.id}` ? "#ffffff" : "#cc4444"), fontSize: 13, padding: "8px 10px", flexShrink: 0 }
+        }, confirmaDel === `banddel:${b.id}` ? "Excluir?" : "\u{1F5D1}")
+      )),
+      bandeiras.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { color: "#666", fontSize: 14 } }, "Cadastre uma bandeira para cada serraria.")
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#818cf8", marginBottom: 8, letterSpacing: 1 } }, "Nova bandeira"),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 } },
+      ...CORES_BANDEIRA.map((c) => /* @__PURE__ */ React.createElement("button", {
+        key: c,
+        onClick: () => setNovaBandCor(c),
+        style: { width: 32, height: 32, borderRadius: "50%", background: c, border: novaBandCor === c ? "3px solid #fff" : "1px solid #333", cursor: "pointer", padding: 0 }
+      }))
+    ),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } },
+      /* @__PURE__ */ React.createElement("input", {
+        value: novaBandNome,
+        onChange: (e) => setNovaBandNome(e.target.value),
+        placeholder: "Nome da serraria",
+        style: { ...IS, fontSize: 16, padding: "12px 12px", flex: 1 }
+      }),
+      /* @__PURE__ */ React.createElement("button", { onClick: addBandeira, style: { ...BSP, flexShrink: 0 } }, "+ Add")
+    )
+  )) : null;
   return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "#0f0f0f", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", fontWeight: "bold", color: "#e8e8e8", paddingBottom: 280 } }, /* @__PURE__ */ React.createElement("style", null, `input::placeholder{color:#8a8a8a;font-weight:bold;opacity:1}`), bloqueioToque && !compFallback && /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 99999, background: "transparent" }, onPointerDown: (e) => e.preventDefault(), onTouchStart: (e) => e.preventDefault() }), compFallback && ReactDOM.createPortal(/* @__PURE__ */ React.createElement("div", { onClick: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, style: { position: "fixed", inset: 0, zIndex: 2147483646, background: "rgba(0,0,0,0.92)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16, boxSizing: "border-box", overflowY: "auto" } }, /* @__PURE__ */ React.createElement("div", { style: { color: "#fff", fontSize: 15, marginBottom: 12, textAlign: "center", lineHeight: 1.4 } }, "Toque em ", /* @__PURE__ */ React.createElement("b", { style: { color: "#4dff91" } }, "\u2B07 Salvar"), " para guardar no celular"), /* @__PURE__ */ React.createElement("img", { src: compFallback.img, draggable: false, style: { maxWidth: "100%", maxHeight: "58vh", borderRadius: 8, border: "1px solid #333", pointerEvents: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } }), /* @__PURE__ */ React.createElement("div", { onClick: (e) => e.stopPropagation(), style: { display: "flex", gap: 12, marginTop: 18, flexShrink: 0 } }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => salvarPNG(compFallback.base64, compFallback.img), style: { ...BS("#1a2a1a", "#4dff91"), fontSize: 16, padding: "16px 24px" } }, "\u2B07 Salvar"), /* @__PURE__ */ React.createElement("button", { type: "button", onPointerUp: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, onClick: () => { try { if (compFallback.isBlob) URL.revokeObjectURL(compFallback.img); } catch (e) {} setCompFallback(null); }, style: { ...BS("#2a2a2a", "#fff"), fontSize: 16, padding: "16px 24px" } }, "\u2715 Fechar")), /* @__PURE__ */ React.createElement("div", { style: { color: "#777", fontSize: 12, marginTop: 14, textAlign: "center" } }, "Toque na \xE1rea escura para fechar")), document.body), /* @__PURE__ */ React.createElement("div", { style: {
     background: "#1a1a1a",
     borderBottom: "1px solid #252525",
@@ -1769,7 +1930,7 @@ async function salvarPNG(base64, imgUrl) {
         esp.oculto ? "\uD83D\uDEAB Incluir no romaneio" : "\uD83D\uDC41 Ocultar do romaneio"
       )
     );
-  }), pngUrl && React.createElement("div", { style: { position: "relative", textAlign: "center", margin: "16px 0" } }, React.createElement("button", { onClick: () => setPngUrl(null), style: { position: "absolute", top: 8, right: 8, zIndex: 10, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,0.72)", border: "1px solid #888", color: "#fff", fontSize: 18, cursor: "pointer", lineHeight: "1", padding: 0 } }, "\u2715"), React.createElement("img", { src: pngUrl, style: { maxWidth: "100%", borderRadius: 8 } }))), aba === "hist" && /* @__PURE__ */ React.createElement(React.Fragment, null, historico.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#555", padding: "60px 0", fontSize: 16 } }, "Nenhum romaneio gerado ainda.", /* @__PURE__ */ React.createElement("br", null), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "Toque em \u{1F4C4} Gerar e ele fica salvo aqui.")) : [...historico].sort((a, b) => {
+  }), pngUrl && React.createElement("div", { style: { position: "relative", textAlign: "center", margin: "16px 0" } }, React.createElement("button", { onClick: () => setPngUrl(null), style: { position: "absolute", top: 8, right: 8, zIndex: 10, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,0.72)", border: "1px solid #888", color: "#fff", fontSize: 18, cursor: "pointer", lineHeight: "1", padding: 0 } }, "\u2715"), React.createElement("img", { src: pngUrl, style: { maxWidth: "100%", borderRadius: 8 } }))), aba === "hist" && /* @__PURE__ */ React.createElement(React.Fragment, null, historico.length > 0 && barraBandeiras, historico.length > 0 && resumoFiltro, historico.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#555", padding: "60px 0", fontSize: 16 } }, "Nenhum romaneio gerado ainda.", /* @__PURE__ */ React.createElement("br", null), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14 } }, "Toque em \u{1F4C4} Gerar e ele fica salvo aqui.")) : [...histFiltrado].sort((a, b) => {
     const parseData = (h) => {
       const d = h.data || "";
       const [dia, mes] = d.split("/").map(Number);
@@ -1787,6 +1948,7 @@ async function salvarPNG(base64, imgUrl) {
       style: {
         background: histSel?.id === h.id ? "#1e1b4b" : "#161616",
         border: `1px solid ${histSel?.id === h.id ? "#a5b4fc" : "#252525"}`,
+        borderLeft: bandDe(h) ? `6px solid ${bandDe(h).cor}` : `1px solid ${histSel?.id === h.id ? "#a5b4fc" : "#252525"}`,
         borderRadius: 10,
         padding: "13px 14px",
         marginBottom: 10,
@@ -1797,8 +1959,15 @@ async function salvarPNG(base64, imgUrl) {
         gap: 8
       }
     },
-    /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, color: h.oculto ? "#777" : "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, h.titulo, h.oculto && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#888", marginLeft: 8, border: "1px solid #444", borderRadius: 4, padding: "1px 6px" } }, "\u{1F441}\uFE0F\u200D\u{1F5E8}\uFE0F oculto do resumo")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: h.oculto ? "#888" : "#ffffff", marginTop: 3 } }, fmtNum(h.m3), " m\xB3 \u2022 R$ ", fmtNum(h.rs))),
-    /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, color: "#a5b4fc" } }, histSel?.id === h.id ? "\u25B4" : "\u25BE")
+    /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, color: h.oculto ? "#777" : "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, h.titulo, h.oculto && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#888", marginLeft: 8, border: "1px solid #444", borderRadius: 4, padding: "1px 6px" } }, "\u{1F441}\uFE0F\u200D\u{1F5E8}\uFE0F oculto do resumo")), bandDe(h) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: bandDe(h).cor, marginTop: 4, display: "flex", alignItems: "center", gap: 5 } }, "\u2691 ", bandDe(h).nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: h.oculto ? "#888" : "#ffffff", marginTop: 3 } }, fmtNum(h.m3), " m\xB3 \u2022 R$ ", fmtNum(h.rs))),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, flexShrink: 0 } },
+      /* @__PURE__ */ React.createElement("button", {
+        onClick: (e) => { e.stopPropagation(); clearTimeout(longPressTimer.current); setBandMenu(h.id); },
+        onTouchStart: (e) => e.stopPropagation(),
+        style: { background: "transparent", border: "1px solid #333", borderRadius: 8, color: bandDe(h) ? bandDe(h).cor : "#666", fontSize: 17, cursor: "pointer", padding: "5px 9px", lineHeight: 1 }
+      }, "\u2691"),
+      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, color: "#a5b4fc" } }, histSel?.id === h.id ? "\u25B4" : "\u25BE")
+    )
   ), histSel?.id === h.id && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, histSel.png ? /* @__PURE__ */ React.createElement("div", { style: { position: "relative", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("img", { src: histSel.png, alt: "Romaneio", style: { maxWidth: "100%", borderRadius: 8, border: "1px solid #2a2a2a", display: "block" } }), /* @__PURE__ */ React.createElement("button", { onClick: () => setHistSel(null), style: { position: "absolute", bottom: 10, right: 10, width: 40, height: 40, borderRadius: "50%", background: "rgba(20,20,20,0.85)", border: "1px solid #888", color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.5)" } }, "\u2715")) : /* @__PURE__ */ React.createElement("div", { style: { color: "#cc6644", fontSize: 14, marginBottom: 8 } }, "Imagem n\xE3o encontrada no armazenamento."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
     "button",
     {
@@ -1826,6 +1995,8 @@ async function salvarPNG(base64, imgUrl) {
       onClick: () => setResumoOpen(true),
       style: { position: "fixed", bottom: 24, right: 20, zIndex: 200, background: "#1a1a4a", color: "#a5b4fc", border: "1px solid #4444aa", borderRadius: 28, padding: "12px 20px", fontSize: 15, fontWeight: "bold", boxShadow: "0 4px 16px #0008", cursor: "pointer" }
     }, "\u{1F4CA} Resumo"),
+    folhaBandeira,
+    folhaGerenciar,
     resumoOpen && /* @__PURE__ */ React.createElement("div", {
       onClick: () => setResumoOpen(false),
       style: { position: "fixed", inset: 0, zIndex: 300, background: "#000a", display: "flex", alignItems: "flex-end" }
@@ -1839,7 +2010,7 @@ async function salvarPNG(base64, imgUrl) {
           onClick: () => {
             // recalcular linhas visíveis (mesma lógica do render)
             const mapa2 = {};
-            historico.filter((h) => !h.oculto).forEach((h) => {
+            histFiltrado.filter((h) => !h.oculto).forEach((h) => {
               if (!h.especiesResumo) return;
               h.especiesResumo.forEach((er) => {
                 if (!mapa2[er.nome]) mapa2[er.nome] = { nome: er.nome, toras: [], rstotal: 0, m3total: 0 };
@@ -1866,7 +2037,7 @@ async function salvarPNG(base64, imgUrl) {
     ), (() => {
       // Montar mapa: nome -> [ toras individuais ]
       const mapa = {};
-      historico.filter((h) => !h.oculto).forEach((h) => {
+      histFiltrado.filter((h) => !h.oculto).forEach((h) => {
         if (!h.especiesResumo) return;
         h.especiesResumo.forEach((er) => {
           if (!mapa[er.nome]) mapa[er.nome] = { nome: er.nome, toras: [], rstotal: 0, m3total: 0, origens: [] };
