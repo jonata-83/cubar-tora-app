@@ -345,7 +345,7 @@ let _id = 1;
 const uid = () => ++_id;
 const SKEY = "cubagem:carga";
 const HKEY = "cubagem:hist";
-const VERSAO = "v205";
+const VERSAO = "v204";
 const BKEY = "cubagem:bandeiras";
 const CORES_BANDEIRA = ["#e05252", "#3fa34d", "#3b82f6", "#eab308", "#a855f7", "#f97316", "#14b8a6", "#ec4899"];
 function cubar(rodo, comp, oco1 = 0, oco2 = 0) {
@@ -724,10 +724,6 @@ function CubagemApp() {
   const [bandeiras, setBandeiras] = useState([]);
   const [filtroBand, setFiltroBand] = useState(null);
   const [bandMenu, setBandMenu] = useState(null);
-  const [divHist, setDivHist] = useState(null);
-  const [divSel, setDivSel] = useState([]);
-  const [divBandA, setDivBandA] = useState(null);
-  const [divBandB, setDivBandB] = useState(null);
   const [gerBand, setGerBand] = useState(false);
   const [novaBandNome, setNovaBandNome] = useState("");
   const [novaBandCor, setNovaBandCor] = useState(CORES_BANDEIRA[0]);
@@ -971,10 +967,7 @@ function CubagemApp() {
       const toras = e.toras.map((t) => ({ id: `${id}::${e.nome}::${t.id}`, rodo: t.rodo, comp: t.comp, oco1: t.oco1 || 0, oco2: t.oco2 || 0, preco: Number(t.preco) || 0, m3: t.m3 }));
       return { nome: e.nome, ntoras: e.toras.length, m3: m3esp, prc, rs, toras };
     });
-    const antigo = historico.find((x) => x.id === id) || {};
-    const extras = {};
-    ["bandeira", "dividido", "origem", "oculto"].forEach((k) => { if (antigo[k] != null) extras[k] = antigo[k]; });
-    salvarHistorico({ ...extras, id, titulo, m3: prevLiq, rs: totalRs, ts: Date.now(), especiesResumo, fornecedor, data, fretePrc: Number(fretePrc) || 0, freteBase }, png);
+    salvarHistorico({ id, titulo, m3: prevLiq, rs: totalRs, ts: Date.now(), especiesResumo, fornecedor, data, fretePrc: Number(fretePrc) || 0, freteBase }, png);
     setConfirmarSalvar(false);
     setEdicaoProtegida(false);
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 100);
@@ -1129,88 +1122,6 @@ function CubagemApp() {
     } catch {
     }
   }
-  // ===== Dividir romaneio entre bandeiras =====
-  const torasDivEsp = (er) => er.toras && er.toras.length ? er.toras : [{ id: `__esp::${er.nome}`, rodo: "?", comp: "?", m3: Number(er.m3) || 0, legacy: true }];
-  function abrirDivisao(h) {
-    setDivHist(h);
-    setDivSel([]);
-    setDivBandA(null);
-    setDivBandB(h.bandeira || null);
-  }
-  function montarParte(h, ids, novoId, ts, bandeira) {
-    const esps = [];
-    (h.especiesResumo || []).forEach((er) => {
-      const lista = torasDivEsp(er).filter((t) => ids.includes(t.id));
-      if (!lista.length) return;
-      if (lista[0].legacy) {
-        esps.push({ ...er });
-        return;
-      }
-      const m3 = lista.reduce((s, t) => s + (Number(t.m3) || 0), 0);
-      const somaTodas = er.toras.reduce((s, t) => s + (Number(t.m3) || 0) * (Number(t.preco) || 0), 0);
-      const coerente = Math.abs(somaTodas - (Number(er.rs) || 0)) <= 1;
-      const rs = coerente
-        ? lista.reduce((s, t) => s + (Number(t.m3) || 0) * (Number(t.preco) || 0), 0)
-        : (Number(er.m3) > 0 ? (Number(er.rs) || 0) * (m3 / Number(er.m3)) : 0);
-      const toras = lista.map((t) => {
-        const suf = String(t.id).split("::").pop();
-        return { ...t, id: `${novoId}::${er.nome}::${suf}` };
-      });
-      esps.push({ nome: er.nome, ntoras: toras.length, m3, prc: er.prc, rs, toras });
-    });
-    const nt = esps.reduce((s, e) => s + (Number(e.ntoras) || (e.toras ? e.toras.length : 0)), 0);
-    return {
-      id: novoId,
-      titulo: `${h.fornecedor || ""} (${nt} toras) \u2014 ${h.data || ""}`,
-      m3: esps.reduce((s, e) => s + (Number(e.m3) || 0), 0),
-      rs: esps.reduce((s, e) => s + (Number(e.rs) || 0), 0),
-      ts,
-      especiesResumo: esps,
-      fornecedor: h.fornecedor || "",
-      data: h.data || "",
-      fretePrc: Number(h.fretePrc) || 0,
-      freteBase: h.freteBase || "bruto",
-      bandeira: bandeira || null,
-      origem: h.id
-    };
-  }
-  async function confirmarDivisao() {
-    const h = divHist;
-    if (!h) return;
-    const todos = (h.especiesResumo || []).flatMap((er) => torasDivEsp(er).map((t) => t.id));
-    const selA = todos.filter((id) => divSel.includes(id));
-    const selB = todos.filter((id) => !divSel.includes(id));
-    if (!selA.length || !selB.length) return;
-    const base = Date.now();
-    const tsPai = Number(h.ts) || base;
-    const parteA = montarParte(h, selA, `c${base}a`, tsPai - 1, divBandA);
-    const parteB = montarParte(h, selB, `c${base}b`, tsPai - 2, divBandB);
-    const idx = [parteA, parteB, ...historico.map((x) => x.id === h.id ? { ...x, dividido: true } : x)];
-    setHistorico(idx);
-    setDivHist(null);
-    setHistSel(null);
-    try {
-      await window.storage.set(HKEY, JSON.stringify(idx));
-    } catch {
-    }
-  }
-  async function desfazerDivisao(h) {
-    const remover = new Set();
-    const juntar = (pid) => historico.forEach((x) => {
-      if (x.origem === pid && !remover.has(x.id)) {
-        remover.add(x.id);
-        juntar(x.id);
-      }
-    });
-    juntar(h.id);
-    const idx = historico.filter((x) => !remover.has(x.id)).map((x) => x.id === h.id ? { ...x, dividido: false } : x);
-    setHistorico(idx);
-    setHistSel(null);
-    try {
-      await window.storage.set(HKEY, JSON.stringify(idx));
-    } catch {
-    }
-  }
   async function toggleOcultoHist(h) {
     const idx = historico.map((x) => x.id === h.id ? { ...x, oculto: !x.oculto } : x);
     setHistorico(idx);
@@ -1346,13 +1257,12 @@ async function salvarPNG(base64, imgUrl) {
       style: { flexShrink: 0, background: "#161616", border: "1px dashed #4444aa", color: "#a5b4fc", borderRadius: 20, padding: "7px 13px", fontSize: 14, fontWeight: "bold", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", cursor: "pointer", whiteSpace: "nowrap" }
     }, "\u2691 Bandeiras")
   );
-  const histSomavel = histFiltrado.filter((h) => !h.dividido);
-  const totFiltM3 = histSomavel.reduce((s, h) => s + (Number(h.m3) || 0), 0);
-  const totFiltRs = histSomavel.reduce((s, h) => s + (Number(h.rs) || 0), 0);
+  const totFiltM3 = histFiltrado.reduce((s, h) => s + (Number(h.m3) || 0), 0);
+  const totFiltRs = histFiltrado.reduce((s, h) => s + (Number(h.rs) || 0), 0);
   const resumoFiltro = filtroBand ? /* @__PURE__ */ React.createElement("div", {
     style: { background: "#141414", border: "1px solid #2a2a2a", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 14, color: "#ddd", display: "flex", justifyContent: "space-between", gap: 8 }
   },
-    /* @__PURE__ */ React.createElement("span", null, `${histSomavel.length} romaneio${histSomavel.length === 1 ? "" : "s"}`),
+    /* @__PURE__ */ React.createElement("span", null, `${histFiltrado.length} romaneio${histFiltrado.length === 1 ? "" : "s"}`),
     /* @__PURE__ */ React.createElement("span", null, fmtNum(totFiltM3), " m\xB3 \u2022 R$ ", fmtNum(totFiltRs))
   ) : null;
   const folhaBandeira = bandMenu ? /* @__PURE__ */ React.createElement("div", {
@@ -1380,77 +1290,6 @@ async function salvarPNG(base64, imgUrl) {
       }, "\u2699 Gerenciar bandeiras")
     )
   )) : null;
-  const folhaDividir = divHist ? (() => {
-    const h = divHist;
-    const todas = (h.especiesResumo || []).flatMap((er) => torasDivEsp(er));
-    const mSel = todas.filter((t) => divSel.includes(t.id));
-    const mRes = todas.filter((t) => !divSel.includes(t.id));
-    const soma = (l) => l.reduce((s, t) => s + (Number(t.m3) || 0), 0);
-    const ok = mSel.length > 0 && mRes.length > 0;
-    const togg = (ids, marcar) => setDivSel((p) => marcar ? [...p.filter((x) => !ids.includes(x)), ...ids] : p.filter((x) => !ids.includes(x)));
-    const chips = (valor, setar) => /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, overflowX: "auto", padding: "4px 0 6px" } },
-      chipBand({ id: "__sem", nome: "Sem bandeira", cor: "#666666" }, valor === null, () => setar(null)),
-      ...bandeiras.map((b) => chipBand(b, valor === b.id, () => setar(b.id)))
-    );
-    const ntoras = (l) => l.reduce((s, t) => s + (t.legacy ? 0 : 1), 0);
-    const caixa = (titulo, l, valor, setar, cor) => /* @__PURE__ */ React.createElement("div", { style: { background: "#161616", border: `1px solid ${cor}`, borderRadius: 10, padding: "10px 12px", marginTop: 12 } },
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 14, color: "#fff" } },
-        /* @__PURE__ */ React.createElement("span", null, titulo),
-        /* @__PURE__ */ React.createElement("span", { style: { color: "#f97316" } }, `${ntoras(l)} toras \u2022 ${fmtM3(soma(l))} m\xB3`)
-      ),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#888", marginTop: 6 } }, "Bandeira:"),
-      chips(valor, setar)
-    );
-    return /* @__PURE__ */ React.createElement("div", {
-      onClick: () => setDivHist(null),
-      style: { position: "fixed", inset: 0, zIndex: 450, background: "#000a", display: "flex", alignItems: "flex-end" }
-    }, /* @__PURE__ */ React.createElement("div", {
-      onClick: (e) => e.stopPropagation(),
-      style: { width: "100%", background: "#111", borderRadius: "16px 16px 0 0", padding: "18px 16px 32px", maxHeight: "88vh", overflowY: "auto" }
-    },
-      /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } },
-        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, fontWeight: "bold", color: "#fff" } }, "\u2702 Dividir romaneio"),
-        /* @__PURE__ */ React.createElement("button", { onClick: () => setDivHist(null), style: { background: "none", border: "none", color: "#888", fontSize: 22, cursor: "pointer", padding: 0, lineHeight: 1 } }, "\u2715")
-      ),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "#888", marginBottom: 12 } }, h.titulo, /* @__PURE__ */ React.createElement("br", null), "Marque as toras que v\xE3o para a bandeira da Parte 1. O resto vai para a Parte 2."),
-      ...(h.especiesResumo || []).map((er) => {
-        const ts = torasDivEsp(er);
-        const ids = ts.map((t) => t.id);
-        const todasMarc = ids.every((id) => divSel.includes(id));
-        const algumas = !todasMarc && ids.some((id) => divSel.includes(id));
-        return /* @__PURE__ */ React.createElement("div", { key: er.nome, style: { border: "1px solid #252525", borderRadius: 10, marginBottom: 10, overflow: "hidden" } },
-          /* @__PURE__ */ React.createElement("button", {
-            onClick: () => togg(ids, !todasMarc),
-            style: { width: "100%", display: "flex", alignItems: "center", gap: 10, background: todasMarc ? "#1e1b4b" : "#181818", border: "none", borderBottom: "1px solid #252525", color: "#818cf8", padding: "11px 12px", fontSize: 15, fontWeight: "bold", fontFamily: "system-ui,Roboto,'Segoe UI',sans-serif", cursor: "pointer", textAlign: "left" }
-          },
-            /* @__PURE__ */ React.createElement("span", { style: { fontSize: 18, color: todasMarc ? "#a5b4fc" : algumas ? "#a5b4fc" : "#555", width: 20 } }, todasMarc ? "\u2611" : algumas ? "\u25A3" : "\u2610"),
-            /* @__PURE__ */ React.createElement("span", { style: { flex: 1 } }, er.nome, " ", /* @__PURE__ */ React.createElement("span", { style: { color: "#777", fontSize: 13 } }, `${ts[0].legacy ? (er.ntoras || "?") : ts.length}t`)),
-            /* @__PURE__ */ React.createElement("span", { style: { color: "#f97316", fontSize: 13 } }, fmtM3(soma(ts)))
-          ),
-          ...(ts[0].legacy ? [] : ts.map((t) => {
-            const m = divSel.includes(t.id);
-            return /* @__PURE__ */ React.createElement("button", {
-              key: t.id,
-              onClick: () => togg([t.id], !m),
-              style: { width: "100%", display: "flex", alignItems: "center", gap: 10, background: m ? "#16143a" : "transparent", border: "none", borderBottom: "1px solid #1c1c1c", color: m ? "#fff" : "#bbb", padding: "9px 12px 9px 22px", fontSize: 14, fontFamily: "monospace", cursor: "pointer", textAlign: "left" }
-            },
-              /* @__PURE__ */ React.createElement("span", { style: { fontSize: 17, color: m ? "#a5b4fc" : "#555", width: 20 } }, m ? "\u2611" : "\u2610"),
-              /* @__PURE__ */ React.createElement("span", { style: { flex: 1 } }, `${t.rodo}x${t.comp}`, (Number(t.oco1) || Number(t.oco2)) ? ` \u2022${t.oco1}x${t.oco2}` : ""),
-              /* @__PURE__ */ React.createElement("span", { style: { color: "#f97316" } }, fmtM3(Number(t.m3) || 0))
-            );
-          }))
-        );
-      }),
-      caixa("Parte 1 (marcadas)", mSel, divBandA, setDivBandA, "#4444aa"),
-      caixa("Parte 2 (restante)", mRes, divBandB, setDivBandB, "#333"),
-      /* @__PURE__ */ React.createElement("button", {
-        onClick: confirmarDivisao,
-        disabled: !ok,
-        style: { ...BSP, width: "100%", marginTop: 16, padding: "14px 16px", fontSize: 16, opacity: ok ? 1 : 0.4 }
-      }, "\u2702 Dividir em 2 romaneios"),
-      /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#777", marginTop: 10, lineHeight: 1.4 } }, "O original fica guardado como \u201Cdividido\u201D e sai da soma do Resumo. Para dividir em 3, divida uma das partes de novo.")
-    ));
-  })() : null;
   const folhaGerenciar = gerBand ? /* @__PURE__ */ React.createElement("div", {
     onClick: () => setGerBand(false),
     style: { position: "fixed", inset: 0, zIndex: 400, background: "#000a", display: "flex", alignItems: "flex-end" }
@@ -2120,7 +1959,7 @@ async function salvarPNG(base64, imgUrl) {
         gap: 8
       }
     },
-    /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, color: h.oculto || h.dividido ? "#777" : "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, h.titulo, h.dividido && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#f59e0b", marginLeft: 8, border: "1px solid #7a5a10", borderRadius: 4, padding: "1px 6px" } }, "\u2702 dividido"), h.origem && !h.dividido && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#a5b4fc", marginLeft: 8, border: "1px solid #3a3a7a", borderRadius: 4, padding: "1px 6px" } }, "\u2702 parte"), h.oculto && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#888", marginLeft: 8, border: "1px solid #444", borderRadius: 4, padding: "1px 6px" } }, "\u{1F441}\uFE0F\u200D\u{1F5E8}\uFE0F oculto do resumo")), bandDe(h) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: bandDe(h).cor, marginTop: 4, display: "flex", alignItems: "center", gap: 5 } }, "\u2691 ", bandDe(h).nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: h.oculto || h.dividido ? "#888" : "#ffffff", marginTop: 3, textDecoration: h.dividido ? "line-through" : "none" } }, fmtNum(h.m3), " m\xB3 \u2022 R$ ", fmtNum(h.rs))),
+    /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 16, color: h.oculto ? "#777" : "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, h.titulo, h.oculto && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#888", marginLeft: 8, border: "1px solid #444", borderRadius: 4, padding: "1px 6px" } }, "\u{1F441}\uFE0F\u200D\u{1F5E8}\uFE0F oculto do resumo")), bandDe(h) && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: bandDe(h).cor, marginTop: 4, display: "flex", alignItems: "center", gap: 5 } }, "\u2691 ", bandDe(h).nome), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: h.oculto ? "#888" : "#ffffff", marginTop: 3 } }, fmtNum(h.m3), " m\xB3 \u2022 R$ ", fmtNum(h.rs))),
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, flexShrink: 0 } },
       /* @__PURE__ */ React.createElement("button", {
         onClick: (e) => { e.stopPropagation(); clearTimeout(longPressTimer.current); setBandMenu(h.id); },
@@ -2129,7 +1968,7 @@ async function salvarPNG(base64, imgUrl) {
       }, "\u2691"),
       /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, color: "#a5b4fc" } }, histSel?.id === h.id ? "\u25B4" : "\u25BE")
     )
-  ), histSel?.id === h.id && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, histSel.png ? /* @__PURE__ */ React.createElement("div", { style: { position: "relative", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("img", { src: histSel.png, alt: "Romaneio", style: { maxWidth: "100%", borderRadius: 8, border: "1px solid #2a2a2a", display: "block" } }), /* @__PURE__ */ React.createElement("button", { onClick: () => setHistSel(null), style: { position: "absolute", bottom: 10, right: 10, width: 40, height: 40, borderRadius: "50%", background: "rgba(20,20,20,0.85)", border: "1px solid #888", color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.5)" } }, "\u2715")) : /* @__PURE__ */ React.createElement("div", { style: { color: "#cc6644", fontSize: 14, marginBottom: 8 } }, "Imagem n\xE3o encontrada no armazenamento."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
+  ), histSel?.id === h.id && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, histSel.png ? /* @__PURE__ */ React.createElement("div", { style: { position: "relative", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("img", { src: histSel.png, alt: "Romaneio", style: { maxWidth: "100%", borderRadius: 8, border: "1px solid #2a2a2a", display: "block" } }), /* @__PURE__ */ React.createElement("button", { onClick: () => setHistSel(null), style: { position: "absolute", bottom: 10, right: 10, width: 40, height: 40, borderRadius: "50%", background: "rgba(20,20,20,0.85)", border: "1px solid #888", color: "#fff", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.5)" } }, "\u2715")) : /* @__PURE__ */ React.createElement("div", { style: { color: "#cc6644", fontSize: 14, marginBottom: 8 } }, "Imagem n\xE3o encontrada no armazenamento."), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
     "button",
     {
       onClick: () => compartilhar(histSel.png),
@@ -2144,20 +1983,6 @@ async function salvarPNG(base64, imgUrl) {
       style: { ...BS("#1a1a3a", "#a5b4fc"), fontSize: 14, padding: "12px 6px" }
     },
     "\u270E Editar"
-  ), histSel.dividido ? /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: () => pedirRemocao(`divundo:${histSel.id}`, () => desfazerDivisao(histSel)),
-      style: { ...BS(confirmaDel === `divundo:${histSel.id}` ? "#7a5a10" : "#2a2008", confirmaDel === `divundo:${histSel.id}` ? "#ffffff" : "#f59e0b"), fontSize: 14, padding: "12px 6px" }
-    },
-    confirmaDel === `divundo:${histSel.id}` ? "Apagar as partes?" : "\u21BA Desfazer divis\xE3o"
-  ) : /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: () => abrirDivisao(histSel),
-      style: { ...BS("#1a1a1a", "#f59e0b"), fontSize: 14, padding: "12px 6px" }
-    },
-    "\u2702 Dividir"
   ), /* @__PURE__ */ React.createElement(
     "button",
     {
@@ -2172,7 +1997,6 @@ async function salvarPNG(base64, imgUrl) {
     }, "\u{1F4CA} Resumo"),
     folhaBandeira,
     folhaGerenciar,
-    folhaDividir,
     resumoOpen && /* @__PURE__ */ React.createElement("div", {
       onClick: () => setResumoOpen(false),
       style: { position: "fixed", inset: 0, zIndex: 300, background: "#000a", display: "flex", alignItems: "flex-end" }
@@ -2186,7 +2010,7 @@ async function salvarPNG(base64, imgUrl) {
           onClick: () => {
             // recalcular linhas visíveis (mesma lógica do render)
             const mapa2 = {};
-            histFiltrado.filter((h) => !h.oculto && !h.dividido).forEach((h) => {
+            histFiltrado.filter((h) => !h.oculto).forEach((h) => {
               if (!h.especiesResumo) return;
               h.especiesResumo.forEach((er) => {
                 if (!mapa2[er.nome]) mapa2[er.nome] = { nome: er.nome, toras: [], rstotal: 0, m3total: 0 };
@@ -2213,7 +2037,7 @@ async function salvarPNG(base64, imgUrl) {
     ), (() => {
       // Montar mapa: nome -> [ toras individuais ]
       const mapa = {};
-      histFiltrado.filter((h) => !h.oculto && !h.dividido).forEach((h) => {
+      histFiltrado.filter((h) => !h.oculto).forEach((h) => {
         if (!h.especiesResumo) return;
         h.especiesResumo.forEach((er) => {
           if (!mapa[er.nome]) mapa[er.nome] = { nome: er.nome, toras: [], rstotal: 0, m3total: 0, origens: [] };
