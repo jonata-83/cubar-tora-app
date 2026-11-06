@@ -345,7 +345,7 @@ let _id = 1;
 const uid = () => ++_id;
 const SKEY = "cubagem:carga";
 const HKEY = "cubagem:hist";
-const VERSAO = "v205";
+const VERSAO = "v206";
 const BKEY = "cubagem:bandeiras";
 const CORES_BANDEIRA = ["#e05252", "#3fa34d", "#3b82f6", "#eab308", "#a855f7", "#f97316", "#14b8a6", "#ec4899"];
 function cubar(rodo, comp, oco1 = 0, oco2 = 0) {
@@ -672,6 +672,27 @@ function gerarPNG({ titulo, especies, fretePrc, freteM3, freteBase }) {
   return canvas.toDataURL("image/png");
 }
 
+function normEsp(s) {
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function dedupEsp(arr, prefer) {
+  const pref = new Set(prefer || []);
+  const out = [];
+  const idx = new Map();
+  (arr || []).forEach((n) => {
+    if (!n || !String(n).trim()) return;
+    const k = normEsp(n);
+    if (!k) return;
+    if (idx.has(k)) {
+      const i = idx.get(k);
+      if (pref.has(n) && !pref.has(out[i])) out[i] = n;
+    } else {
+      idx.set(k, out.length);
+      out.push(n);
+    }
+  });
+  return out;
+}
 const ESPECIES_COMUNS = [
   "Mirindiba",
   "Sucupira Amarela",
@@ -822,6 +843,19 @@ function CubagemApp() {
     }, 600);
     return () => clearTimeout(saveTimer.current);
   }, [carregado, fornecedor, data, fretePrc, freteBase, especies, espSel, cargaOk, cargaId]);
+  const dedupFeito = React.useRef(false);
+  useEffect(() => {
+    if (!carregado || dedupFeito.current) return;
+    dedupFeito.current = true;
+    const emUso = especies.filter((e) => e.nome && e.toras && e.toras.length > 0).map((e) => e.nome);
+    setListaEspecies((p) => {
+      const d = dedupEsp(p, emUso);
+      return d.length === p.length ? p : d;
+    });
+  }, [carregado]);
+  useEffect(() => {
+    if (!pickerOpen) setOutraNome("");
+  }, [pickerOpen]);
   useEffect(() => {
     if (!carregado) return;
     window.storage.set("cubagem:especies", JSON.stringify(listaEspecies)).catch(() => {
@@ -1667,45 +1701,108 @@ async function salvarPNG(base64, imgUrl) {
       style: { ...BS("#1a2a1a", "#44cc66"), fontSize: 13, padding: "6px 14px", borderRadius: 20 }
     },
     "\u2190 Voltar"
-  )), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } }, listaEspecies.map((n) => {
-    const ex = especies.find((e) => e.nome === n && e.toras.length > 0);
-    return /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        key: n,
-        onClick: () => {
-          if (modoExcluirEsp) setListaEspecies((p) => p.filter((x) => x !== n));
-          else escolherEspecie(n);
-        },
-        style: {
-          ...BS(
-            modoExcluirEsp ? "#2a0a0a" : ex ? "#6366f1" : "#222233",
-            modoExcluirEsp ? "#ff6666" : ex ? "#ffffff" : "#ddddff"
-          ),
-          fontSize: 14,
-          padding: "8px 12px"
-        }
-      },
-      modoExcluirEsp ? "\u2715 " : "",
-      n,
-      !modoExcluirEsp && ex && ex.toras.length > 0 && /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 6, background: "#1a1a2e", borderRadius: 8, padding: "2px 8px", fontSize: 15, color: "#ff9933", fontWeight: "bold" } }, ex.toras.length, "t")
-    );
-  })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } }, /* @__PURE__ */ React.createElement(
+  )), /* @__PURE__ */ React.createElement("div", { style: { position: "sticky", top: -14, zIndex: 2, background: "#0d0d1a", margin: "0 -14px", padding: "0 14px 10px" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative" } }, /* @__PURE__ */ React.createElement(
     "input",
     {
-      style: { ...IS, width: "100%", fontSize: 15, padding: "9px 10px", boxSizing: "border-box" },
-      placeholder: "Outra esp\xE9cie\u2026",
+      style: { ...IS, width: "100%", fontSize: 16, padding: "11px 40px 11px 12px", boxSizing: "border-box", border: "1px solid #4a4a8a" },
+      placeholder: "\u{1F50D} Buscar ou adicionar esp\xE9cie\u2026",
       value: outraNome,
-      onChange: (e) => setOutraNome(e.target.value)
+      enterKeyHint: "go",
+      autoComplete: "off",
+      autoCorrect: "off",
+      spellCheck: false,
+      onFocus: () => setTecladoAberto(true),
+      onBlur: () => setTecladoAberto(false),
+      onChange: (e) => setOutraNome(e.target.value),
+      onKeyDown: (e) => {
+        if (e.key !== "Enter") return;
+        const q = normEsp(outraNome);
+        if (!q || modoExcluirEsp) return;
+        const todos = dedupEsp([...especies.filter((x) => x.nome && x.toras.length > 0).map((x) => x.nome), ...listaEspecies]);
+        const exato = todos.find((n) => normEsp(n) === q);
+        const achados = todos.filter((n) => normEsp(n).includes(q));
+        if (exato) escolherEspecie(exato);
+        else if (achados.length === 1) escolherEspecie(achados[0]);
+        else if (achados.length === 0) {
+          const n = outraNome.trim();
+          setListaEspecies((p) => [...p, n]);
+          escolherEspecie(n);
+        }
+        e.target.blur();
+      }
     }
-  ), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
+  ), outraNome && /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => setOutraNome(""),
+      style: { position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", color: "#999", fontSize: 20, padding: "4px 10px", cursor: "pointer" }
+    },
+    "\u2715"
+  ))), (() => {
+    const q = normEsp(outraNome);
+    const casa = (n) => !q || normEsp(n).includes(q);
+    const ordenar = (arr) => !q ? arr : [...arr].sort((a, b) => {
+      const ia = normEsp(a).startsWith(q) ? 0 : 1;
+      const ib = normEsp(b).startsWith(q) ? 0 : 1;
+      return ia - ib;
+    });
+    const chip = (n, emUsoChip) => {
+      const ex = especies.find((e) => e.nome === n && e.toras.length > 0);
+      const sel = espAtual?.nome === n;
+      return /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          key: n,
+          onClick: () => {
+            if (modoExcluirEsp) setListaEspecies((p) => p.filter((x) => x !== n));
+            else escolherEspecie(n);
+          },
+          style: {
+            ...BS(
+              modoExcluirEsp ? "#2a0a0a" : ex ? "#6366f1" : "#222233",
+              modoExcluirEsp ? "#ff6666" : ex ? "#ffffff" : "#ddddff"
+            ),
+            fontSize: emUsoChip ? 16 : 14,
+            padding: emUsoChip ? "10px 14px" : "8px 12px",
+            boxShadow: sel && !modoExcluirEsp ? "0 0 0 2px #ffcc33" : "none"
+          }
+        },
+        modoExcluirEsp ? "\u2715 " : "",
+        n,
+        !modoExcluirEsp && ex && ex.toras.length > 0 && /* @__PURE__ */ React.createElement("span", { style: { marginLeft: 6, background: "#1a1a2e", borderRadius: 8, padding: "2px 8px", fontSize: 15, color: "#ff9933", fontWeight: "bold" } }, ex.toras.length, "t")
+      );
+    };
+    const rotulo = (t) => /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#777", textTransform: "uppercase", letterSpacing: 1, margin: "4px 0 6px" } }, t);
+    const grade = (itens) => /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 } }, itens);
+    if (modoExcluirEsp) {
+      const lista = ordenar(listaEspecies.filter(casa));
+      return /* @__PURE__ */ React.createElement("div", null, rotulo("Toque para excluir da lista"), grade(lista.map((n) => chip(n, false))));
+    }
+    const emUsoTodos = [];
+    especies.forEach((e) => {
+      if (e.nome && e.toras && e.toras.length > 0 && !emUsoTodos.includes(e.nome)) emUsoTodos.push(e.nome);
+    });
+    const usoNorm = new Set(emUsoTodos.map(normEsp));
+    const emUso = ordenar(emUsoTodos.filter(casa));
+    const resto = ordenar(dedupEsp(listaEspecies).filter((n) => !usoNorm.has(normEsp(n))).filter(casa));
+    return /* @__PURE__ */ React.createElement("div", null, emUso.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 12 } }, rotulo("Neste romaneio"), grade(emUso.map((n) => chip(n, true)))), resto.length > 0 && /* @__PURE__ */ React.createElement("div", null, emUso.length > 0 && rotulo(q ? "Outras" : "Todas"), grade(resto.map((n) => chip(n, false)))), q && emUso.length === 0 && resto.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, color: "#999", textAlign: "center", padding: "16px 8px" } }, "Nenhuma esp\xE9cie encontrada. Toque em ", /* @__PURE__ */ React.createElement("b", { style: { color: "#ddddff" } }, "\uFF0B Adicionar"), " para criar \u201C", outraNome.trim(), "\u201D."));
+  })(), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 6 } }, /* @__PURE__ */ React.createElement(
     "button",
     {
       disabled: !outraNome.trim(),
       onClick: () => {
         const n = outraNome.trim();
-        setListaEspecies((p) => p.includes(n) ? p : [...p, n]);
-        escolherEspecie(n);
+        const k = normEsp(n);
+        if (!k) return;
+        const todos = [...especies.filter((x) => x.nome && x.toras.length > 0).map((x) => x.nome), ...listaEspecies];
+        const igual = todos.find((x) => normEsp(x) === k);
+        if (igual) {
+          if (!listaEspecies.some((x) => normEsp(x) === k)) setListaEspecies((p) => [...p, igual]);
+          escolherEspecie(igual);
+        } else {
+          setListaEspecies((p) => [...p, n]);
+          escolherEspecie(n);
+        }
         setOutraNome("");
       },
       style: {
